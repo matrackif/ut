@@ -5,38 +5,9 @@
 // (See accompanying file LICENSE_1_0.txt or copy at
 // http://www.boost.org/LICENSE_1_0.txt)
 //
-#if defined(__cpp_modules) && !defined(BOOST_UT_DISABLE_MODULE)
-export module boost.ut;
-export import std;
-#else
-#pragma once
-#endif
 
-#if __has_include(<ios646.h>)
-#include <iso646.h>  // and, or, not, ...
-#endif
-
-#if not defined(__cpp_rvalue_references)
-#error "[Boost::ext].UT requires support for rvalue references";
-#elif not defined(__cpp_decltype)
-#error "[Boost::ext].UT requires support for decltype";
-#elif not defined(__cpp_return_type_deduction)
-#error "[Boost::ext].UT requires support for return type deduction";
-#elif not defined(__cpp_deduction_guides)
-#error "[Boost::ext].UT requires support for return deduction guides";
-#elif not defined(__cpp_generic_lambdas)
-#error "[Boost::ext].UT requires support for generic lambdas";
-#elif not defined(__cpp_constexpr)
-#error "[Boost::ext].UT requires support for constexpr";
-#elif not defined(__cpp_alias_templates)
-#error "[Boost::ext].UT requires support for alias templates";
-#elif not defined(__cpp_variadic_templates)
-#error "[Boost::ext].UT requires support for variadic templates";
-#elif not defined(__cpp_fold_expressions)
-#error "[Boost::ext].UT requires support for return fold expressions";
-#elif not defined(__cpp_static_assert)
-#error "[Boost::ext].UT requires support for static assert";
-#else
+#ifndef BOOST_UT_HPP
+#define BOOST_UT_HPP
 #define BOOST_UT_VERSION 1'1'8
 
 #if defined(__has_builtin) and defined(__GNUC__) and (__GNUC__ < 10) and \
@@ -70,10 +41,7 @@ export import std;
 #include <source_location>
 #endif
 
-#if defined(__cpp_modules) && !defined(BOOST_UT_DISABLE_MODULE)
-export
-#endif
-namespace boost::inline ext::ut::inline v1_1_8 {
+namespace boost::inline ext::ut::inline v1_1_8 {  // NOLINT
 namespace utility {
 template <class>
 class function;
@@ -127,7 +95,7 @@ class function<R(TArgs...)> {
   }
 
   if (std::empty(input)) {
-    return pattern[0] == '*' ? is_match(input, pattern.substr(1)) : false;
+    return pattern[0] == '*' && is_match(input, pattern.substr(1));
   }
 
   if (pattern[0] != '?' and pattern[0] != '*' and pattern[0] != input[0]) {
@@ -205,7 +173,7 @@ template <class T = std::string_view, class TDelim>
 
 namespace reflection {
 #if defined(__cpp_lib_source_location)
-  using source_location = std::source_location;
+using source_location = std::source_location;
 #else
 class source_location {
  public:
@@ -371,12 +339,12 @@ static constexpr auto is_container_v =
     is_valid<T>([](auto t) -> decltype(t.begin(), t.end(), void()) {});
 
 template <class T>
-static constexpr auto has_npos_v = is_valid<T>([](auto t) -> decltype(void(t.npos)) {
-});
+static constexpr auto has_npos_v =
+    is_valid<T>([](auto t) -> decltype(void(t.npos)) {});
 
 template <class T>
-static constexpr auto has_value_v = is_valid<T>([](auto t) -> decltype(void(t.value)) {
-});
+static constexpr auto has_value_v =
+    is_valid<T>([](auto t) -> decltype(void(t.value)) {});
 
 template <class T>
 static constexpr auto has_epsilon_v =
@@ -511,7 +479,7 @@ struct log {
 };
 template <class TMsg = std::string_view>
 log(TMsg) -> log<TMsg>;
-struct fatal_assertion {};
+struct fatal_assertion : public std::exception {};
 struct exception {
   const char* msg{};
   [[nodiscard]] auto what() const -> const char* { return msg; }
@@ -544,7 +512,7 @@ template <class T>
 struct type_ : op {
   template <class TOther>
   [[nodiscard]] constexpr auto operator()(const TOther&) const
-      -> const type_<TOther> {
+      -> type_<TOther> {
     return {};
   }
   [[nodiscard]] constexpr auto operator==(type_<T>) -> bool { return true; }
@@ -1056,8 +1024,8 @@ class printer {
     return (*this << reflection::type_name<T>());
   }
 
-  auto str() const { return out_.str(); }
-  const auto& colors() const { return colors_; }
+  [[nodiscard]] auto str() const { return out_.str(); }
+  [[nodiscard]] const auto& colors() const { return colors_; }
 
  private:
   ut::colors colors_{};
@@ -1331,7 +1299,7 @@ class runner {
     reporter_.on(fatal_assertion);
 
 #if defined(__cpp_exceptions)
-    if (not level_) {
+    if (!level_) {
       reporter_.on(events::summary{});
     }
     throw fatal_assertion;
@@ -1378,7 +1346,8 @@ class runner {
 struct override {};
 
 template <class = override, class...>
-[[maybe_unused]] inline auto cfg = runner<reporter<printer>>{};
+[[maybe_unused]] inline auto cfg =
+    runner<reporter<printer>>{};  // NOLINT(cert-err58-cpp)
 
 namespace detail {
 struct tag {
@@ -1409,7 +1378,9 @@ struct test {
   std::vector<std::string_view> tag{};
 
   template <class... Ts>
-  constexpr auto operator=(test_location<void (*)()> _test) {
+  constexpr auto operator=(
+      test_location<void (*)()>
+          _test) {  // NOLINT(misc-unconventional-assign-operator)
     on<Ts...>(events::test<void (*)()>{.type = type,
                                        .name = name,
                                        .tag = tag,
@@ -1422,7 +1393,8 @@ struct test {
   template <class Test,
             type_traits::requires_t<
                 not type_traits::is_convertible_v<Test, void (*)()>> = 0>
-  constexpr auto operator=(Test _test) ->
+  constexpr auto operator=(Test _test)
+      ->  // NOLINT(misc-unconventional-assign-operator)
       typename type_traits::identity<Test, decltype(_test())>::type {
     on<Test>(events::test<Test>{.type = type,
                                 .name = name,
@@ -1433,14 +1405,16 @@ struct test {
     return _test;
   }
 
-  constexpr auto operator=(void (*_test)(std::string_view)) const {
+  constexpr auto operator=(void (*_test)(
+      std::string_view)) const {  // NOLINT(misc-unconventional-assign-operator)
     return _test(name);
   }
 
   template <class Test,
             type_traits::requires_t<not type_traits::is_convertible_v<
                 Test, void (*)(std::string_view)>> = 0>
-  constexpr auto operator=(Test _test)
+  constexpr auto operator=(
+      Test _test)  // NOLINT(misc-unconventional-assign-operator)
       -> decltype(_test(type_traits::declval<std::string_view>())) {
     return _test(name);
   }
@@ -2017,7 +1991,7 @@ constexpr auto operator or(const TLhs& lhs, const TRhs& rhs) {
 template <class T, type_traits::requires_t<type_traits::is_op_v<T>> = 0>
 constexpr auto operator not(const T& t) {
   using not_t = detail::not_<typename T::type>;
-  struct not_ : not_t, detail::log {
+  struct not_ : not_t, detail::log {  // NOLINT
     using type [[maybe_unused]] = not_t;
     using not_t::not_t;
     const detail::terse_<not_t> _{*this};
@@ -2110,7 +2084,7 @@ struct suite {
 [[maybe_unused]] inline auto tag = [](const auto name) {
   return detail::tag{{name}};
 };
-[[maybe_unused]] inline auto skip = tag("skip");
+[[maybe_unused]] inline auto skip = tag("skip");  // NOLINT(cert-err58-cpp)
 template <class T = void>
 [[maybe_unused]] constexpr auto type = detail::type_<T>();
 
@@ -2172,11 +2146,12 @@ class steps {
   class step {
    public:
     template <class TPattern>
-    step(steps& steps, const TPattern& pattern)
-        : steps_{steps}, pattern_{pattern} {}
+    step(steps& steps, TPattern pattern)
+        : steps_{steps}, pattern_{std::move(pattern)} {}
 
     ~step() { steps_.next(pattern_); }
 
+    // NOLINTBEGIN
     template <class TExpr>
     auto operator=(const TExpr& expr) -> void {
       for (const auto& [pattern, _] : steps_.call_steps()) {
@@ -2186,7 +2161,7 @@ class steps {
       }
 
       steps_.call_steps().emplace_back(
-          pattern_, [expr, pattern = pattern_](const auto&_step) {
+          pattern_, [expr, pattern = pattern_](const auto& _step) {
             [=]<class... TArgs>(type_traits::list<TArgs...>) {
               log << _step;
               auto i = 0u;
@@ -2196,9 +2171,10 @@ class steps {
             (typename type_traits::function_traits<TExpr>::args{});
           });
     }
+    // NOLINTEND
 
    private:
-    template<class T>
+    template <class T>
     static auto lexical_cast(const std::string& str) {
       T t{};
       std::istringstream iss{};
@@ -2222,8 +2198,8 @@ class steps {
   template <class TGherkin>
   auto operator|(const TGherkin& gherkin) {
     gherkin_ = utility::split<std::string>(gherkin, '\n');
-    for (auto&_step : gherkin_) {
-		_step.erase(0, _step.find_first_not_of(" \t"));
+    for (auto& _step : gherkin_) {
+      _step.erase(0, _step.find_first_not_of(" \t"));
     }
 
     return [this] {
@@ -2256,7 +2232,7 @@ class steps {
              _step.find(scenario) != std::string::npos;
     };
 
-    const auto call_steps = [this, is_scenario](const auto&_step,
+    const auto call_steps = [this, is_scenario](const auto& _step,
                                                 const auto i) {
       for (const auto& [name, call] : call_steps_) {
         if (is_scenario(_step)) {
@@ -2272,7 +2248,7 @@ class steps {
     };
 
     decltype(step_) i{};
-    for (const auto&_step : gherkin_) {
+    for (const auto& _step : gherkin_) {
       if (i++ == step_) {
         call_steps(_step, i);
       }
@@ -2328,5 +2304,6 @@ using operators::operator not;
 using operators::operator|;
 using operators::operator/;
 using operators::operator>>;
-}  // namespace boost::ext::ut::v1_1_8
-#endif
+}  // namespace boost::inline ext::ut::inline v1_1_8
+
+#endif  // #ifndef BOOST_UT_HPP
